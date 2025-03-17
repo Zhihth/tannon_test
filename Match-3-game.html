@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>动物消消乐</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        .game-container {
+            display: flex;
+            gap: 30px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        canvas {
+            border: 2px solid #333;
+            border-radius: 8px;
+        }
+        #score {
+            font-size: 24px;
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+        .instructions {
+            width: 250px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .instructions h3 {
+            color: #2c3e50;
+            margin-top: 0;
+        }
+        .instructions ul {
+            padding-left: 20px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div>
+            <div id="score">得分: 0</div>
+            <canvas id="gameCanvas" width="400" height="400"></canvas>
+        </div>
+        <div class="instructions">
+            <h3>游戏玩法</h3>
+            <ul>
+                <li>点击选择第一个动物</li>
+                <li>点击相邻的第二个动物进行交换</li>
+                <li>三个相同动物连成一线即可消除</li>
+                <li>消除后上方动物会下落后补充</li>
+                <li>每次消除获得10分/每个动物</li>
+                <li>支持连续消除获得更高分</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const tileSize = 40;
+        const rows = 10;
+        const cols = 10;
+        let score = 0;
+
+        // 动物配置（调整大象和老鼠的颜色）
+        const animals = ['🐒', '🐅', '🐘', '🦒', '🐖', '🐀'];
+        const colors = [
+            '#FFD700', // 猴子-金
+            '#FF4500',  // 老虎-橙红
+            '#800080',  // 大象-紫色（新颜色）
+            '#32CD32',  // 长颈鹿-亮绿
+            '#FF69B4',  // 猪-粉红
+            '#808080'   // 老鼠-灰色（新颜色）
+        ];
+
+        let board = [];
+        let selectedTile = null;
+
+        function initGame() {
+            for(let i = 0; i < rows; i++) {
+                board[i] = [];
+                for(let j = 0; j < cols; j++) {
+                    board[i][j] = getRandomAnimal(i, j);
+                }
+            }
+            drawBoard();
+        }
+
+        function getRandomAnimal(row, col) {
+            let animal;
+            do {
+                animal = Math.floor(Math.random() * animals.length);
+            } while ((row >= 2 && board[row-1][col] === animal && board[row-2][col] === animal) ||
+                    (col >= 2 && board[row][col-1] === animal && board[row][col-2] === animal));
+            return animal;
+        }
+
+        function drawBoard() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            for(let i = 0; i < rows; i++) {
+                for(let j = 0; j < cols; j++) {
+                    // 绘制选中效果
+                    if(selectedTile && selectedTile.x === j && selectedTile.y === i) {
+                        ctx.fillStyle = 'rgba(0, 191, 255, 0.3)';
+                        ctx.fillRect(j*tileSize, i*tileSize, tileSize, tileSize);
+                    }
+
+                    // 绘制背景
+                    ctx.fillStyle = colors[board[i][j]];
+                    ctx.fillRect(j*tileSize+2, i*tileSize+2, tileSize-4, tileSize-4);
+                    
+                    // 绘制动物
+                    ctx.font = '30px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = '#2c3e50';
+                    ctx.fillText(animals[board[i][j]], 
+                        j*tileSize + tileSize/2, 
+                        i*tileSize + tileSize/2 + 10);
+
+                    // 绘制选中边框
+                    if(selectedTile && selectedTile.x === j && selectedTile.y === i) {
+                        ctx.strokeStyle = '#FF0000';
+                        ctx.lineWidth = 3;
+                        ctx.strokeRect(j*tileSize+2, i*tileSize+2, tileSize-4, tileSize-4);
+                    }
+                }
+            }
+        }
+
+        function swap(x1, y1, x2, y2) {
+            [board[y1][x1], board[y2][x2]] = [board[y2][x2], board[y1][x1]];
+        }
+
+        function findMatches() {
+            const matches = new Set();
+
+            // 横向检查
+            for(let i = 0; i < rows; i++) {
+                for(let j = 0; j < cols-2; j++) {
+                    if(board[i][j] === board[i][j+1] && board[i][j] === board[i][j+2]) {
+                        matches.add(`${i},${j}`);
+                        matches.add(`${i},${j+1}`);
+                        matches.add(`${i},${j+2}`);
+                        // 扩展检查超过3个的情况
+                        let k = j+3;
+                        while(k < cols && board[i][j] === board[i][k]) {
+                            matches.add(`${i},${k}`);
+                            k++;
+                        }
+                    }
+                }
+            }
+
+            // 纵向检查
+            for(let j = 0; j < cols; j++) {
+                for(let i = 0; i < rows-2; i++) {
+                    if(board[i][j] === board[i+1][j] && board[i][j] === board[i+2][j]) {
+                        matches.add(`${i},${j}`);
+                        matches.add(`${i+1},${j}`);
+                        matches.add(`${i+2},${j}`);
+                        // 扩展检查超过3个的情况
+                        let k = i+3;
+                        while(k < rows && board[i][j] === board[k][j]) {
+                            matches.add(`${k},${j}`);
+                            k++;
+                        }
+                    }
+                }
+            }
+
+            return matches;
+        }
+
+        function processMatches() {
+            const matches = findMatches();
+            if(matches.size === 0) return false;
+
+            score += matches.size * 10;
+            document.getElementById('score').textContent = `得分: ${score}`;
+
+            matches.forEach(pos => {
+                const [y, x] = pos.split(',').map(Number);
+                board[y][x] = -1;
+            });
+
+            // 方块下落动画
+            for(let j = 0; j < cols; j++) {
+                let writeIndex = rows - 1;
+                for(let i = rows-1; i >= 0; i--) {
+                    if(board[i][j] !== -1) {
+                        board[writeIndex][j] = board[i][j];
+                        writeIndex--;
+                    }
+                }
+                while(writeIndex >= 0) {
+                    board[writeIndex][j] = Math.floor(Math.random() * animals.length);
+                    writeIndex--;
+                }
+            }
+
+            return true;
+        }
+
+        function gameLoop() {
+            let changed;
+            do {
+                changed = processMatches();
+                drawBoard();
+            } while (changed);
+        }
+
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / tileSize);
+            const y = Math.floor((e.clientY - rect.top) / tileSize);
+            
+            if(selectedTile) {
+                const dx = Math.abs(selectedTile.x - x);
+                const dy = Math.abs(selectedTile.y - y);
+                if((dx === 1 && dy === 0) || (dy === 1 && dx === 0)) {
+                    swap(selectedTile.x, selectedTile.y, x, y);
+                    if(!findMatches().size) {
+                        swap(selectedTile.x, selectedTile.y, x, y);
+                    }
+                }
+                selectedTile = null;
+                gameLoop();
+            } else {
+                selectedTile = {x, y};
+            }
+            drawBoard();
+        });
+
+        initGame();
+    </script>
+</body>
+</html>
