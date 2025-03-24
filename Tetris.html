@@ -23,7 +23,8 @@
     <canvas id="game" width="300" height="600"></canvas>
     <div class="game-info">
         <h2>得分: <span id="score">0</span></h2>
-        <button id="pauseBtn" style="margin: 10px 0; padding: 5px 10px;">暂停游戏</button>
+        <button id="controlBtn" style="margin: 10px 0; padding: 5px 10px;">开始游戏</button>
+        <button id="restartBtn" style="margin: 10px 0; padding: 5px 10px;">重新开始</button>
         <h3>下一个方块:</h3>
         <canvas id="next" width="100" height="100"></canvas>
         <p>控制键：<br>
@@ -39,14 +40,17 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const nextCanvas = document.getElementById('next');
 const nextCtx = nextCanvas.getContext('2d');
+const controlBtn = document.getElementById('controlBtn');
+const restartBtn = document.getElementById('restartBtn');
 const scoreElement = document.getElementById('score');
-const pauseBtn = document.getElementById('pauseBtn');
 
 let isPaused = false;
 const BLOCK_SIZE = 30;
 const COLS = 10;
 const ROWS = 20;
 let score = 0;
+let gameInterval = null;
+let isGameStarted = false;
 
 // 方块形状和颜色
 const SHAPES = [
@@ -73,11 +77,43 @@ function init() {
     nextPiece = createPiece();
     spawnNewPiece();
     
-    // 游戏循环
-    setInterval(update, 1000);
-    
     // 键盘控制
     document.addEventListener('keydown', handleInput);
+    draw();
+}
+
+// 开始/暂停游戏
+function toggleGame() {
+    if (!isGameStarted) {
+        isGameStarted = true;
+        gameInterval = setInterval(update, 1000);
+        controlBtn.textContent = '暂停游戏';
+    } else {
+        isPaused = !isPaused;
+        controlBtn.textContent = isPaused ? '继续游戏' : '暂停游戏';
+    }
+}
+
+// 重新开始游戏
+function restartGame() {
+    // 清除游戏循环
+    if (gameInterval) {
+        clearInterval(gameInterval);
+        gameInterval = null;
+    }
+    
+    // 重置游戏状态
+    isGameStarted = false;
+    isPaused = false;
+    score = 0;
+    scoreElement.textContent = '0';
+    board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+    
+    // 重置按钮状态
+    controlBtn.textContent = '开始游戏';
+    
+    // 重新初始化游戏
+    init();
 }
 
 // 创建新方块
@@ -230,7 +266,7 @@ function drawNextPiece() {
 
 // 处理键盘输入
 function handleInput(e) {
-    if (isPaused && e.keyCode !== 27) return;
+    if (!isGameStarted || (isPaused && e.keyCode !== 27)) return;
     switch(e.keyCode) {
         case 37: // 左
             if (!checkCollision(-1, 0, currentPiece.shape)) {
@@ -265,21 +301,19 @@ function handleInput(e) {
     draw();
 }
 
-// 暂停按钮点击事件
-pauseBtn.addEventListener('click', () => {
-    isPaused = !isPaused;
-    pauseBtn.textContent = isPaused ? '继续游戏' : '暂停游戏';
-});
-
 // ESC键暂停/继续
 document.addEventListener('keydown', (e) => {
-    if (e.keyCode === 27) { // ESC键
+    if (e.keyCode === 27 && isGameStarted) { // ESC键
         isPaused = !isPaused;
-        pauseBtn.textContent = isPaused ? '继续游戏' : '暂停游戏';
+        controlBtn.textContent = isPaused ? '继续游戏' : '暂停游戏';
     }
 });
 
-// 启动游戏
+// 添加按钮事件监听
+controlBtn.addEventListener('click', toggleGame);
+restartBtn.addEventListener('click', restartGame);
+
+// 启动游戏初始化
 init();
 </script>
 </body>
