@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>完整版俄罗斯方块（优化布局）</title>
+    <style>
+        body {
+            background: #202028;
+            color: #fff;
+            font-family: Arial;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            display: flex;
+            gap: 40px;
+            margin-top: 30px;
+        }
+        canvas { 
+            border: 2px solid #fff;
+            image-rendering: pixelated;
+        }
+        .info-panel {
+            width: 250px;
+            padding: 20px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+        }
+        .controls {
+            margin: 20px 0;
+            line-height: 1.6;
+            color: #0DFF72;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        button {
+            padding: 12px 20px;
+            background: #0DFF72;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            flex: 1;
+            transition: all 0.3s ease;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 2px 8px rgba(13, 255, 114, 0.4);
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        #gameOver {
+            color: #FF5252;
+            font-size: 1.2em;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <h2>俄罗斯方块 - 2025经典版</h2>
+    <div class="container">
+        <canvas id="game" width="300" height="600"></canvas>
+        <div class="info-panel">
+            <h3>得分: <span id="score">0</span></h3>
+            <div class="controls">
+                <h4>操作说明</h4>
+                <ul>
+                    <li>←→ : 左右移动</li>
+                    <li>↑ : 旋转方块</li>
+                    <li>↓ : 加速下落</li>
+                    <li>空格 : 瞬间下落</li>
+                    <li>P : 暂停/继续</li>
+                </ul>
+            </div>
+            <h4>下一个方块:</h4>
+            <canvas id="next" width="120" height="120"></canvas>
+            <p id="gameOver" style="display:none">游戏结束！</p>
+            <div class="button-group">
+                <button onclick="resetGame()">新游戏</button>
+                <button id="pauseBtn" onclick="togglePause()">暂停</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const nextCanvas = document.getElementById('next');
+const nextCtx = nextCanvas.getContext('2d');
+const BLOCK_SIZE = 30;
+const COLS = 10, ROWS = 20;
+let board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+
+// 标准得分系统（基于网页6、网页8的规则）
+const SCORE_RULES = { 1: 100, 2: 300, 3: 500, 4: 800 };
+const SHAPES = [
+    { shape: [[1,1,1,1]], color: '#FF0D72' },   // I型
+    { shape: [[1,1],[1,1]], color: '#0DC2FF' },  // O型
+    { shape: [[1,1,1],[0,1,0]], color: '#0DFF72' },// T型
+    { shape: [[1,1,1],[1,0,0]], color: '#F538FF' },// L型
+    { shape: [[1,1,1],[0,0,1]], color: '#FF8E0D' },// J型
+    { shape: [[1,1,0],[0,1,1]], color: '#FFE138' },// S型
+    { shape: [[0,1,1],[1,1,0]], color: '#3877FF' } // Z型
+];
+
+let score = 0, currentPiece, nextPiece, gameLoop;
+let isPaused = false;
+
+class Piece {
+    constructor(shapeObj) {
+        this.shape = shapeObj.shape;
+        this.color = shapeObj.color;
+        this.x = Math.floor(COLS/2) - Math.floor(this.shape[0].length/2);
+        this.y = 0;
+    }
+}
+
+//======核心逻辑======
+function initGame() {
+    clearInterval(gameLoop);
+    board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+    score = 0;
+    isPaused = false;
+    updateScore();
+    document.getElementById('gameOver').style.display = 'none';
+    document.getElementById('pauseBtn').textContent = '暂停';
+    document.getElementById('pauseBtn').disabled = false;
+    
+    currentPiece = new Piece(SHAPES[Math.floor(Math.random()*7)]);
+    nextPiece = new Piece(SHAPES[Math.floor(Math.random()*7)]);
+    gameLoop = setInterval(update, 1000);
+    draw();
+}
+
+function drawBlock(x, y, color, ctxType = ctx) {
+    ctxType.fillStyle = color;
+    ctxType.fillRect(x*BLOCK_SIZE, y*BLOCK_SIZE, BLOCK_SIZE-1, BLOCK_SIZE-1);
+}
+
+function draw() {
+    // 主游戏区
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    board.forEach((row, y) => row.forEach((color, x) => color && drawBlock(x, y, color)));
+    currentPiece.shape.forEach((row, y) => row.forEach((cell, x) => 
+        cell && drawBlock(currentPiece.x + x, currentPiece.y + y, currentPiece.color)
+    ));
+    
+    // 预览区
+    nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+    const offsetX = (4 - nextPiece.shape[0].length) * BLOCK_SIZE/2;
+    nextPiece.shape.forEach((row, y) => row.forEach((cell, x) => 
+        cell && drawBlock(x + offsetX/BLOCK_SIZE, y + 1, nextPiece.color, nextCtx)
+    ));
+
+    // 暂停时显示遮罩
+    if (isPaused) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#fff';
+        ctx.font = '30px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('已暂停', canvas.width/2, canvas.height/2);
+    }
+}
+
+function canMove(dx, dy, shape = currentPiece.shape) {
+    return shape.every((row, y) => 
+        row.every((cell, x) => {
+            if (!cell) return true;
+            const newX = currentPiece.x + x + dx;
+            const newY = currentPiece.y + y + dy;
+            return newX >=0 && newX < COLS && 
+                   newY < ROWS && 
+                   !board[newY]?.[newX];
+        })
+    );
+}
+
+function lockPiece() {
+    currentPiece.shape.forEach((row, y) => row.forEach((cell, x) => {
+        if (cell) board[currentPiece.y + y][currentPiece.x + x] = currentPiece.color;
+    }));
+}
+
+function checkLines() {
+    let lines = 0;
+    for(let y = ROWS-1; y >=0; y--) {
+        if(board[y].every(cell => cell)) {
+            board.splice(y, 1);
+            board.unshift(Array(COLS).fill(0));
+            lines++;
+            y++;
+        }
+    }
+    if(lines) {
+        score += SCORE_RULES[lines] || 0;
+        updateScore();
+    }
+}
+
+function updateScore() {
+    document.getElementById('score').textContent = score;
+}
+
+function togglePause() {
+    isPaused = !isPaused;
+    const pauseBtn = document.getElementById('pauseBtn');
+    if (isPaused) {
+        clearInterval(gameLoop);
+        pauseBtn.textContent = '继续';
+    } else {
+        gameLoop = setInterval(update, 1000);
+        pauseBtn.textContent = '暂停';
+    }
+    draw();
+}
+
+//======事件控制======
+document.addEventListener('keydown', e => {
+    if (isPaused && e.key !== 'p' && e.key !== 'P') return;
+    
+    switch(e.key) {
+        case 'ArrowLeft':  if(canMove(-1,0)) currentPiece.x--; break;
+        case 'ArrowRight': if(canMove(1,0)) currentPiece.x++; break;
+        case 'ArrowDown':  if(canMove(0,1)) currentPiece.y++; break;
+        case 'ArrowUp':    rotate(); break;
+        case ' ': while(canMove(0,1)) currentPiece.y++; break;
+        case 'p':
+        case 'P': togglePause(); break;
+    }
+    draw();
+});
+
+function rotate() {
+    const rotated = currentPiece.shape[0].map((_,i) =>
+        currentPiece.shape.map(row => row[i]).reverse()
+    );
+    if(canMove(0, 0, rotated)) currentPiece.shape = rotated;
+}
+
+function update() {
+    if(canMove(0,1)) {
+        currentPiece.y++;
+    } else {
+        lockPiece();
+        checkLines();
+        currentPiece = nextPiece;
+        nextPiece = new Piece(SHAPES[Math.floor(Math.random()*7)]);
+        if(!canMove(0,0)) endGame();
+    }
+    draw();
+}
+
+function endGame() {
+    document.getElementById('gameOver').style.display = 'block';
+    document.getElementById('pauseBtn').disabled = true;
+    clearInterval(gameLoop);
+}
+
+function resetGame() { initGame(); }
+
+// 初始化
+initGame();
+</script>
+</body>
+</html>

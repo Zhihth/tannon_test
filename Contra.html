@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>魂斗罗简易版</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        #gameContainer {
+            position: relative;
+        }
+        #gameCanvas {
+            border: 2px solid #4a4a4a;
+            border-radius: 5px;
+            box-shadow: 0 0 20px rgba(255,0,0,0.3);
+        }
+        .panel {
+            position: absolute;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        #menu {
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        button {
+            background: #c00;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #f00;
+        }
+        .hud {
+            top: 10px;
+            left: 10px;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="menu" class="panel">
+            <h2>魂斗罗简易版</h2>
+            <p>操作说明：</p>
+            <p>← → 移动</p>
+            <p>↑ 跳跃</p>
+            <p>空格 射击</p>
+            <p>P 暂停</p>
+            <button onclick="startGame()">开始游戏</button>
+        </div>
+        <div id="hud" class="panel hud" style="display: none;">
+            <p>得分: <span id="score">0</span></p>
+            <p>生命: <span id="lives">3</span></p>
+        </div>
+    </div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = 800;
+canvas.height = 600;
+
+// 游戏状态
+let gameState = 'menu';
+let score = 0;
+let lives = 3;
+let isPaused = false;
+
+// 玩家属性
+const player = {
+    x: 400,
+    y: 500,
+    width: 40,
+    height: 60,
+    speed: 5,
+    isJumping: false,
+    jumpForce: 15,
+    gravity: 0.5,
+    velocityY: 0,
+    canShoot: true
+};
+
+// 子弹数组
+let bullets = [];
+// 敌人数组
+let enemies = [];
+// 按键状态
+const keys = {};
+
+class Bullet {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.speed = 10;
+        this.radius = 5;
+    }
+
+    update() {
+        this.y -= this.speed;
+    }
+
+    draw() {
+        ctx.fillStyle = '#ff0';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+class Enemy {
+    constructor() {
+        this.x = Math.random() * canvas.width;
+        this.y = 0;
+        this.width = 40;
+        this.height = 40;
+        this.speed = 3;
+    }
+
+    update() {
+        this.y += this.speed;
+        // 简单AI：向玩家移动
+        if (this.x < player.x) this.x += 1;
+        else this.x -= 1;
+    }
+
+    draw() {
+        ctx.fillStyle = '#0f0';
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+    }
+}
+
+function startGame() {
+    document.getElementById('menu').style.display = 'none';
+    document.getElementById('hud').style.display = 'block';
+    gameState = 'playing';
+    gameLoop();
+}
+
+function spawnEnemy() {
+    if (Math.random() < 0.02) {
+        enemies.push(new Enemy());
+    }
+}
+
+function updateGame() {
+    // 玩家移动
+    if (keys['ArrowLeft']) player.x -= player.speed;
+    if (keys['ArrowRight']) player.x += player.speed;
+    
+    // 跳跃
+    if (keys['ArrowUp'] && !player.isJumping) {
+        player.velocityY = -player.jumpForce;
+        player.isJumping = true;
+    }
+    
+    // 重力
+    player.velocityY += player.gravity;
+    player.y += player.velocityY;
+    
+    // 地面碰撞
+    if (player.y + player.height > canvas.height) {
+        player.y = canvas.height - player.height;
+        player.isJumping = false;
+        player.velocityY = 0;
+    }
+    
+    // 射击
+    if (keys[' '] && player.canShoot) {
+        bullets.push(new Bullet(player.x + player.width/2, player.y));
+        player.canShoot = false;
+        setTimeout(() => player.canShoot = true, 200);
+    }
+    
+    // 更新子弹和敌人
+    bullets.forEach((bullet, index) => {
+        bullet.update();
+        if (bullet.y < 0) bullets.splice(index, 1);
+    });
+    
+    enemies.forEach((enemy, index) => {
+        enemy.update();
+        // 碰撞检测
+        bullets.forEach((bullet, bIndex) => {
+            if (distance(bullet.x, bullet.y, enemy.x, enemy.y) < 20) {
+                enemies.splice(index, 1);
+                bullets.splice(bIndex, 1);
+                score += 100;
+                document.getElementById('score').textContent = score;
+            }
+        });
+    });
+    
+    spawnEnemy();
+}
+
+function drawGame() {
+    // 清空画布
+    ctx.fillStyle = '#222';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // 绘制玩家
+    ctx.fillStyle = '#f00';
+    ctx.fillRect(player.x, player.y, player.width, player.height);
+    
+    // 绘制子弹
+    bullets.forEach(bullet => bullet.draw());
+    
+    // 绘制敌人
+    enemies.forEach(enemy => enemy.draw());
+    
+    // 绘制暂停界面
+    if (isPaused) {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'white';
+        ctx.font = '48px Arial';
+        ctx.fillText('暂停中', canvas.width/2 - 80, canvas.height/2);
+    }
+}
+
+function gameLoop() {
+    if (gameState !== 'playing' || isPaused) return;
+    
+    updateGame();
+    drawGame();
+    requestAnimationFrame(gameLoop);
+}
+
+function distance(x1, y1, x2, y2) {
+    return Math.sqrt((x2-x1)**2 + (y2-y1)**2);
+}
+
+// 事件监听
+window.addEventListener('keydown', (e) => {
+    keys[e.key] = true;
+    if (e.key === 'p') isPaused = !isPaused;
+});
+
+window.addEventListener('keyup', (e) => {
+    keys[e.key] = false;
+});
+
+// 初始化
+document.getElementById('score').textContent = score;
+document.getElementById('lives').textContent = lives;
+</script>
+</body>
+</html>
